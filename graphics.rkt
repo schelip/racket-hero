@@ -1,6 +1,10 @@
 #lang racket/gui
 (require 2htdp/image 2htdp/universe)
 
+;; The objective of this module is to provide the graphics for the game. In order to do that, it must
+;; be able to render the guitar, the fingers, simple and long notes, and play the animations for the
+;; approaching notes and the pressing of the fingers
+
 ;; ---------------------------------------------------------------------------------------------------
 ;; BASE GRAPHICS
 ;; ---------------------------------------------------------------------------------------------------
@@ -46,8 +50,24 @@
 
 ;; a smaller, gray ellipse in the center of the finger to indicate it as pressed
 (define (press-finger finger)
-  (overlay (ellipse finger-pressed-width finger-pressed-height 'solid 'darkgray)
+  (overlay (ellipse finger-pressed-width finger-pressed-height 'solid 'gray)
            finger))
+
+;; calculates the horizontal position of the finger on a lane
+(define (get-finger-horizontal-offset lane)
+  (- 0 (+ fingers-horizontal-offset (* lane finger-width))))
+
+;; places a finger sprite on its lane of the guitar
+(define (place-finger lane pressed guitar)
+  (let ([finger (make-finger lane)])
+    (overlay/align/offset
+     'left 'bottom
+     (if pressed
+         (press-finger finger)
+         finger)
+     (get-finger-horizontal-offset lane)
+     fingers-vertical-offset
+     guitar)))
 
 ;; note constants, also based on the finger-size
 (define note-width (* 0.93 finger-center-width))
@@ -93,23 +113,20 @@
 ;; adds borders, separates the guitar in 5 sections (the 5 lanes) and adds a finger to each lane
 (define (make-guitar [it 0] [image base-guitar])
   (cond
-    [(zero? it) (make-guitar 1 (add-line
-                                (add-line
-                                 image
-                                 guitar-outer-width 0 0 guitar-height
-                                 guitar-border-pen)
-                                (- guitar-larger-width guitar-outer-width) 0 guitar-larger-width guitar-height
-                                guitar-border-pen))]
+    [(zero? it)
+     (make-guitar (add-line
+                   (add-line image guitar-outer-width 0 0 guitar-height guitar-border-pen)
+                   (- guitar-larger-width guitar-outer-width)
+                   0 guitar-larger-width guitar-height
+                   guitar-border-pen))]
     [(= it 6) image]
-    [else (make-guitar (add1 it) (overlay/align/offset
-                                  'left 'bottom
-                                  (make-finger (sub1 it))
-                                  (- 0 (+ fingers-horizontal-offset (* (sub1 it) finger-width))) fingers-vertical-offset
-                                  (if (= it 5)
-                                      image
-                                      (add-line image
-                                                (+ guitar-outer-width (* it (/ guitar-smaller-width 5))) 0 (* it (/ guitar-larger-width 5)) guitar-height
-                                                'black))))]))
+    [else
+     (make-guitar
+      (add1 it)
+      (place-finger (sub1 it) #f
+                    (if (= it 5) image
+                        (add-line image (+ guitar-outer-width (* it (/ guitar-smaller-width 5)))
+                                  0 (* it (/ guitar-larger-width 5)) guitar-height 'black))))]))
 
 ;; there will be only one guitar world
 (define guitar (make-guitar))
@@ -144,30 +161,37 @@
   (- (get-initial-x lane) (* (get-tan lane) state)))
 
 ;; places an approaching note
-(define (note-approaching lane state guitar)
+(define (place-note lane state guitar)
   (place-image (scale (get-current-scale state) (make-note lane))
                (get-current-x lane state) state guitar))
 
-(define (render-notes state current-guitar)
+;; renders the approaching notes on their lanes of the guitar
+(define (render-notes state guitar)
   (cond
-    [(empty? state) current-guitar]
-    [(empty? (rest (first state))) (render-notes (rest state) current-guitar)]
+    [(empty? state) guitar]
+    [(empty? (rest (first state))) (render-notes (rest state) guitar)]
     [else
      (let ([lane (first (first state))]
            [note-states (rest (first state))])
        (render-notes (cons (cons lane (rest note-states))
                            (rest state))
-                     (note-approaching lane (first note-states) current-guitar)))]))
+                     (place-note lane (first note-states) guitar)))]))
 
-(define (reposition-notes-lane lane-state)
-  (for/list ([note lane-state]
-             #:when (<= (+ note 6) guitar-height))
-    (+ note 6)))
-
+;; recalculates the approaching notes state on their lanes (because of passing time)
 (define (reposition-notes state)
-  (for/list ([lane-state state]
-             #:unless (empty? (rest lane-state)))
-    (cons (first lane-state) (reposition-notes-lane (rest lane-state)))))
+  (for/list ([lane-state state])
+    (if (empty? (rest lane-state))
+        lane-state
+        (cons (first lane-state)
+              (for/list ([note (rest lane-state)]
+                         #:when (<= (+ note 2) guitar-height))
+                (+ note 6))))))
+
+;; renders the fingers on their presssed/unpressed state on their lanes of the guitar
+(define (render-fingers state guitar)
+  (cond
+    [(empty? state) guitar]
+    [else (render-fingers (rest state) (place-finger (- 5 (length state)) (first state) guitar))]))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; WORLD
@@ -176,9 +200,10 @@
 ;; initial state of the world
 (define WORLD0 'resting)
 
-(define test-notes
-  (list (list 0 0)
-        (list 1 30)
+(define WORLD_STATE
+  (list (list #f #f #f #f #f)
+        (list 0 10)
+        (list 1 30 100)
         (list 2 60)
         (list 3 90)
         (list 4 120)))
@@ -187,7 +212,7 @@
 (define (receive state message)
   (cond
     [(symbol=? state 'resting) 'running]
-    [(symbol=? state 'running) test-notes]
+    [(symbol=? state 'running) WORLD_STATE]
     [else state]))
 
 ;; moves the notes every clock tick
@@ -195,21 +220,40 @@
   (cond
     [(symbol? state)
      (cond
-       [(symbol=? state 'running) (make-package 'running test-notes)])]
-    [(list? state)
-       (reposition-notes state)]))
+       [(symbol=? state 'running) (make-package 'running WORLD_STATE)])]
+    [(list? state) (cons (first state) (reposition-notes (rest state)))]))
 
 ;; renders the guitar with its notes
 (define (render state)
-    (cond
-      [(symbol? state) guitar]
-      [(list? state) (render-notes state guitar)]))
+  (cond
+    [(symbol? state) guitar]
+    [(list? state)
+     (render-notes (rest state)
+                   (render-fingers (first state) guitar))]))
+
+;; maps the keyboard keys to the guitar lanes
+(define finger-keys
+  (hash
+   "a" 0
+   "s" 1
+   "j" 2
+   "k" 3
+   "l" 4))
+
+;; hanldes a key press/release to change the state of a finger in a lane to pressed/released
+(define (handle-press-release pressing)
+  (lambda (state a-key)
+    (if (hash-has-key? finger-keys a-key)
+        (cons (list-set (first state) (hash-ref finger-keys a-key) pressing) (rest state))
+        state)))
 
 (define (create-world)
   (big-bang WORLD0
     (on-receive receive)
     (on-tick update)
     (to-draw render)
+    (on-key (handle-press-release #t))
+    (on-release (handle-press-release #f))
     (name "guitar")
     (register LOCALHOST)))
 
