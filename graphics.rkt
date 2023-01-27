@@ -1,13 +1,11 @@
 #lang racket/gui
-(require 2htdp/image 2htdp/universe)
+(require 2htdp/image 2htdp/universe lang/posn)
 
 ;; The objective of this module is to provide the graphics for the game. In order to do that, it must
 ;; be able to render the guitar, the fingers, simple and long notes, and play the animations for the
 ;; approaching notes and the pressing of the fingers
 
-;; ---------------------------------------------------------------------------------------------------
-;; BASE GRAPHICS
-;; ---------------------------------------------------------------------------------------------------
+(provide (all-defined-out))
 
 ;; color pallete for the graphics, used in adition to the default colors
 (define colors
@@ -48,10 +46,28 @@
   (overlay (ellipse finger-center-width finger-center-height 'solid 'black)
            (ellipse finger-width finger-height 'solid (hash-ref finger-colors lane))))
 
+;; ready for render finger sprites
+(define fingers
+  (hash
+   0 (make-finger 0)
+   1 (make-finger 1)
+   2 (make-finger 2)
+   3 (make-finger 3)
+   4 (make-finger 4)))
+
 ;; a smaller, gray ellipse in the center of the finger to indicate it as pressed
-(define (press-finger finger)
+(define (press-finger lane)
   (overlay (ellipse finger-pressed-width finger-pressed-height 'solid 'gray)
-           finger))
+           (hash-ref fingers lane)))
+
+;; ready for render pressed-finger sprites
+(define pressed-fingers
+  (hash
+   0 (press-finger 0)
+   1 (press-finger 1)
+   2 (press-finger 2)
+   3 (press-finger 3)
+   4 (press-finger 4)))
 
 ;; calculates the horizontal position of the finger on a lane
 (define (get-finger-horizontal-offset lane)
@@ -59,15 +75,14 @@
 
 ;; places a finger sprite on its lane of the guitar
 (define (place-finger lane pressed guitar)
-  (let ([finger (make-finger lane)])
-    (overlay/align/offset
-     'left 'bottom
-     (if pressed
-         (press-finger finger)
-         finger)
-     (get-finger-horizontal-offset lane)
-     fingers-vertical-offset
-     guitar)))
+  (overlay/align/offset
+   'left 'bottom
+   (if pressed
+       (hash-ref pressed-fingers lane)
+       (hash-ref fingers lane))
+   (get-finger-horizontal-offset lane)
+   fingers-vertical-offset
+   guitar))
 
 ;; note constants, also based on the finger-size
 (define note-width (* 0.93 finger-center-width))
@@ -87,6 +102,15 @@
                  (ellipse note-opening-border-width note-opening-border-height 'solid 'black)
                  (ellipse note-color-width note-color-height 'solid (hash-ref finger-colors lane))
                  (ellipse note-width note-height 'solid 'white)))
+
+;; ready for render note sprites
+(define notes
+  (hash
+   0 (make-note 0)
+   1 (make-note 1)
+   2 (make-note 2)
+   3 (make-note 3)
+   4 (make-note 4)))
 
 ;; guitar constants, also based on figer-size
 (define guitar-separator-width (/ finger-size 10))
@@ -128,8 +152,31 @@
                         (add-line image (+ guitar-outer-width (* it (/ guitar-smaller-width 5)))
                                   0 (* it (/ guitar-larger-width 5)) guitar-height 'black))))]))
 
-;; there will be only one guitar world
+;; the base guitar with no notes and no fingers - in other words, the background
 (define guitar (make-guitar))
+
+;; makes a flame-shaped polygon
+(define (make-base-flame color)
+  (scale (/ finger-size 260)
+         (polygon (list (make-posn 65 310)
+                        (make-posn 170 310)
+                        (make-posn 230 280)
+                        (make-posn 260 175)
+                        (make-posn 230 75)
+                        (make-posn 175 165)
+                        (make-posn 125 0)
+                        (make-posn 90 130)
+                        (make-posn 50 80)
+                        (make-posn 0 160)
+                        (make-posn 30 280))
+                  'solid
+                  color)))
+
+;; flame sprite, made by overlaying a mirrored, brighter flame-polygon on another flame polygon
+(define flame
+  (overlay/offset (scale 0.55 (flip-horizontal (make-base-flame (hash-ref colors 'yellow))))
+                  0 (- 0 (* 0.2 finger-size))
+                  (make-base-flame (hash-ref colors 'orange))))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; ANIMATIONS
@@ -165,7 +212,7 @@
 
 ;; places an approaching note
 (define (place-note lane state guitar)
-  (place-image (scale (get-current-scale state) (make-note lane))
+  (place-image (scale (get-current-scale state) (hash-ref notes lane))
                (get-current-x lane state) state guitar))
 
 ;; renders the approaching notes on their lanes of the guitar
@@ -195,69 +242,3 @@
   (cond
     [(empty? state) guitar]
     [else (render-fingers (rest state) (place-finger (- 5 (length state)) (first state) guitar))]))
-
-;; ---------------------------------------------------------------------------------------------------
-;; WORLD
-;; ---------------------------------------------------------------------------------------------------
-
-;; initial state of the world
-(define WORLD0 'resting)
-
-(define WORLD_STATE
-  (list (list #f #f #f #f #f)
-        (list 0 10)
-        (list 1 30 100)
-        (list 2 60)
-        (list 3 90)
-        (list 4 120)))
-
-;; checks if there are any note approaching
-(define (receive state message)
-  (cond
-    [(symbol=? state 'resting) 'running]
-    [(symbol=? state 'running) WORLD_STATE]
-    [else state]))
-
-;; moves the notes every clock tick
-(define (update state)
-  (cond
-    [(symbol? state)
-     (cond
-       [(symbol=? state 'running) (make-package 'running WORLD_STATE)])]
-    [(list? state) (cons (first state) (reposition-notes (rest state)))]))
-
-;; renders the guitar with its notes
-(define (render state)
-  (cond
-    [(symbol? state) guitar]
-    [(list? state)
-     (render-notes (rest state)
-                   (render-fingers (first state) guitar))]))
-
-;; maps the keyboard keys to the guitar lanes
-(define finger-keys
-  (hash
-   "a" 0
-   "s" 1
-   "j" 2
-   "k" 3
-   "l" 4))
-
-;; hanldes a key press/release to change the state of a finger in a lane to pressed/released
-(define (handle-press-release pressing)
-  (lambda (state a-key)
-    (if (hash-has-key? finger-keys a-key)
-        (cons (list-set (first state) (hash-ref finger-keys a-key) pressing) (rest state))
-        state)))
-
-(define (create-world)
-  (big-bang WORLD0
-    (on-receive receive)
-    (on-tick update)
-    (to-draw render)
-    (on-key (handle-press-release #t))
-    (on-release (handle-press-release #f))
-    (name "guitar")
-    (register LOCALHOST)))
-
-(create-world)
