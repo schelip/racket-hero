@@ -114,11 +114,11 @@
 (define (make-guitar [it 0] [image base-guitar])
   (cond
     [(zero? it)
-     (make-guitar (add-line
-                   (add-line image guitar-outer-width 0 0 guitar-height guitar-border-pen)
-                   (- guitar-larger-width guitar-outer-width)
-                   0 guitar-larger-width guitar-height
-                   guitar-border-pen))]
+     (make-guitar 1 (add-line
+                     (add-line image guitar-outer-width 0 0 guitar-height guitar-border-pen)
+                     (- guitar-larger-width guitar-outer-width)
+                     0 guitar-larger-width guitar-height
+                     guitar-border-pen))]
     [(= it 6) image]
     [else
      (make-guitar
@@ -160,6 +160,9 @@
 (define (get-current-x lane state)
   (- (get-initial-x lane) (* (get-tan lane) state)))
 
+(define (get-adjusted-speed speed state)
+  (/ speed (/ initial-finger-scale (get-current-scale state))))
+
 ;; places an approaching note
 (define (place-note lane state guitar)
   (place-image (scale (get-current-scale state) (make-note lane))
@@ -183,9 +186,9 @@
     (if (empty? (rest lane-state))
         lane-state
         (cons (first lane-state)
-              (for/list ([note (rest lane-state)]
-                         #:when (<= (+ note 2) guitar-height))
-                (+ note 6))))))
+              (for/list ([note-state (rest lane-state)]
+                         #:when (<= (+ note-state 2) guitar-height))
+                (+ note-state (get-adjusted-speed 3 note-state)))))))
 
 ;; renders the fingers on their presssed/unpressed state on their lanes of the guitar
 (define (render-fingers state guitar)
