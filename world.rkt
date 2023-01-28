@@ -15,11 +15,11 @@
 (define WORLD_STATE
   (list (list #f #f #f #f #f) ;; pressed fingers
         (list 0 0 0 0 0) ;; burning animations
-        (list 0 10) ;; notes in first lane
-        (list 1 10 30) ;; notes in second lane ...
-        (list 2 60)
-        (list 3 90)
-        (list 4 120)))
+        (list (list 0 10) ;; notes in each lane
+              (list 1 10 30)
+              (list 2 60)
+              (list 3 90)
+              (list 4 120))))
 
 
 ;; getters for each part of the world state
@@ -28,7 +28,7 @@
 (define (burn-state state)
   (second state))
 (define (notes-state state)
-  (rest (rest state)))
+  (third state))
 
 ;; checks if there are any note approaching
 (define (receive state message)
@@ -43,10 +43,10 @@
     [(symbol? state)
      (cond
        [(symbol=? state 'running) (make-package 'running WORLD_STATE)])]
-    [(list? state) (append (list (fingers-state state)
-                                 (update-burn (burn-state state)))
-                           (update-notes (notes-state state)
-                                         (burn-state state)))]))
+    [(list? state) (list (fingers-state state)
+                         (update-burn (burn-state state))
+                         (update-notes (notes-state state)
+                                       (burn-state state)))]))
 
 ;; renders the guitar with its notes
 (define (render state)
@@ -71,12 +71,12 @@
   (λ (state a-key)
     (if (hash-has-key? finger-keys a-key)
         (let ([lane (hash-ref finger-keys a-key)])
-          (append (list (change-fingers (fingers-state state) lane pressing)
-                        (change-burn (burn-state state)
-                                     (notes-state state)
-                                     lane
-                                     pressing))
-                  (notes-state state)))
+          (list (change-fingers (fingers-state state) lane pressing)
+                (change-burn (burn-state state)
+                             (notes-state state)
+                             lane
+                             pressing)
+                (notes-state state)))
         state)))
 
 (define (create-world)
