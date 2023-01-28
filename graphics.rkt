@@ -112,6 +112,11 @@
    3 (make-note 3)
    4 (make-note 4)))
 
+;; places an approaching note
+(define (place-note lane state guitar)
+  (place-image (scale (get-current-scale state) (hash-ref notes lane))
+               (get-current-x lane state) state guitar))
+
 ;; guitar constants, also based on figer-size
 (define guitar-separator-width (/ finger-size 10))
 (define guitar-larger-width-factor 5.5)
@@ -119,7 +124,6 @@
 (define guitar-larger-width (* guitar-larger-width-factor finger-size))
 (define guitar-smaller-width (/ guitar-larger-width guitar-smaller-width-factor))
 (define guitar-outer-width (/ (- guitar-larger-width guitar-smaller-width) 2))
-
 (define guitar-height (* 1.3 guitar-larger-width))
 (define fingers-vertical-offset (* 0.85 finger-width))
 (define fingers-horizontal-offset
@@ -157,7 +161,7 @@
 
 ;; makes a flame-shaped polygon
 (define (make-base-flame color)
-  (scale (/ finger-size 260)
+  (scale (/ (* 0.80 finger-size) 260)
          (polygon (list (make-posn 65 310)
                         (make-posn 170 310)
                         (make-posn 230 280)
@@ -178,67 +182,114 @@
                   0 (- 0 (* 0.2 finger-size))
                   (make-base-flame (hash-ref colors 'orange))))
 
+;; places a flame in a specific lane
+(define (place-flame lane guitar)
+  (overlay/align/offset
+   'left 'bottom
+   flame
+   (- (get-finger-horizontal-offset lane) (* 0.1 finger-width))
+   (+ fingers-vertical-offset (* 0.22 finger-height))
+   guitar))
+
 ;; ---------------------------------------------------------------------------------------------------
-;; ANIMATIONS
+;; RENDERING AND ANIMATIONS
 ;; ---------------------------------------------------------------------------------------------------
 
 ;; values for the note approaching animation, that needs to get progressively larger
 ;; in order to follow the perspective of the guitar
-(define final-finger-scale (/ guitar-larger-width-factor 5))
-(define initial-finger-scale (/ final-finger-scale guitar-smaller-width-factor))
-(define final-finger-width (* final-finger-scale finger-width))
-(define initial-finger-width (* initial-finger-scale finger-width))
+(define final-note-scale (/ guitar-larger-width-factor 5))
+(define initial-note-scale (/ final-note-scale guitar-smaller-width-factor))
+(define final-note-width (* final-note-scale finger-width))
+(define initial-note-width (* initial-note-scale finger-width))
 
 ;; helper functions to calculate the position of an approaching note,
 ;; considering the initial and final widths and the guitar dimensions
 (define (get-initial-x lane)
-  (+ (+ guitar-outer-width (/ initial-finger-width 2)) (* lane initial-finger-width)))
+  (+ (+ guitar-outer-width (/ initial-note-width 2)) (* lane initial-note-width)))
 (define (get-final-x lane)
-  (+ (/ final-finger-width 2) (* lane final-finger-width)))
+  (+ (/ final-note-width 2) (* lane final-note-width)))
 (define (get-tan lane)
   (/ (- (get-initial-x lane) (get-final-x lane)) guitar-height))
 
 ;; calculates the scale of an approaching note so that it follows the perspective of the guitar
-(define (get-current-scale state)
-  (+ initial-finger-scale
-     (* (- 1 initial-finger-scale)
-        (/ state (- guitar-height fingers-vertical-offset)))))
+(define (get-current-scale note-state)
+  (+ initial-note-scale
+     (* (- 1 initial-note-scale)
+        (/ note-state (- guitar-height fingers-vertical-offset)))))
 ;; calculates the position of an approaching note so that it follows the perspective of the guitar
-(define (get-current-x lane state)
-  (- (get-initial-x lane) (* (get-tan lane) state)))
+(define (get-current-x lane note-state)
+  (- (get-initial-x lane) (* (get-tan lane) note-state)))
 
-(define (get-adjusted-speed speed state)
-  (/ speed (/ initial-finger-scale (get-current-scale state))))
+(define (get-adjusted-speed speed note-state)
+  (/ speed (/ initial-note-scale (get-current-scale note-state))))
 
-;; places an approaching note
-(define (place-note lane state guitar)
-  (place-image (scale (get-current-scale state) (hash-ref notes lane))
-               (get-current-x lane state) state guitar))
+(define (change-fingers fingers-state lane pressing)
+  (list-set fingers-state lane pressing))
 
-;; renders the approaching notes on their lanes of the guitar
-(define (render-notes state guitar)
+;; renders the fingers on their presssed/unpressed state on their lanes of the guitar
+(define (render-fingers fingers-state guitar)
   (cond
-    [(empty? state) guitar]
-    [(empty? (rest (first state))) (render-notes (rest state) guitar)]
-    [else
-     (let ([lane (first (first state))]
-           [note-states (rest (first state))])
-       (render-notes (cons (cons lane (rest note-states))
-                           (rest state))
-                     (place-note lane (first note-states) guitar)))]))
+    [(empty? fingers-state) guitar]
+    [else (render-fingers (rest fingers-state)
+                          (place-finger (- 5 (length fingers-state)) (first fingers-state) guitar))]))
+
+;; values for burning the notes
+(define burn-range-extra 15)
+(define burn-range-min
+  (- (- guitar-height fingers-vertical-offset) (+ finger-height burn-range-extra)))
+(define burn-range-max
+  (+ (- guitar-height fingers-vertical-offset) (+ finger-height burn-range-extra)))
+(define (in-burn-range? note-state)
+  (and (>= note-state burn-range-min) (<= note-state burn-range-max)))
+
+;; during how many ticks the flame stays in the screen
+(define fire-timeout 14)
+
+;; passes time for the rendered flames
+(define (update-burn burn-state)
+  (for/list ([burn-lane burn-state])
+    (if (positive? burn-lane)
+        (sub1 burn-lane)
+        burn-lane)))
+
+;; checks if there are any notes that will be burned because of a finger press and then
+;; adds time for the flame that will be rendered
+(define (change-burn burn-state notes-state lane pressing)
+  (cond [(not pressing) burn-state]
+        [(not (for/or ([note-state (list-ref notes-state lane)])
+                (in-burn-range? note-state)))
+         burn-state]
+        [else (list-set burn-state lane fire-timeout)]))
+
+;; renders the active flames
+(define (render-burn burn-state guitar)
+  (cond
+    [(empty? burn-state) guitar]
+    [else (render-burn (rest burn-state)
+                       (if (positive? (first burn-state))
+                           (place-flame (- 5 (length burn-state)) guitar)
+                           guitar))]))
 
 ;; recalculates the approaching notes state on their lanes (because of passing time)
-(define (reposition-notes state)
-  (for/list ([lane-state state])
+(define (update-notes notes-state burn-state)
+  (for/list ([lane-state notes-state])
     (if (empty? (rest lane-state))
         lane-state
         (cons (first lane-state)
               (for/list ([note-state (rest lane-state)]
-                         #:when (<= (+ note-state 2) guitar-height))
-                (+ note-state (get-adjusted-speed 3 note-state)))))))
+                         #:when (and (<= (+ note-state 1) guitar-height)
+                                     (not (and (in-burn-range? note-state)
+                                               (positive? (list-ref burn-state (first lane-state)))))))
+                         (+ note-state (get-adjusted-speed 3 note-state)))))))
 
-;; renders the fingers on their presssed/unpressed state on their lanes of the guitar
-(define (render-fingers state guitar)
+;; renders the approaching notes on their lanes of the guitar
+(define (render-notes notes-state guitar)
   (cond
-    [(empty? state) guitar]
-    [else (render-fingers (rest state) (place-finger (- 5 (length state)) (first state) guitar))]))
+    [(empty? notes-state) guitar]
+    [(empty? (rest (first notes-state))) (render-notes (rest notes-state) guitar)]
+    [else
+     (let ([lane (first (first notes-state))]
+           [note-states (rest (first notes-state))])
+       (render-notes (cons (cons lane (rest note-states))
+                           (rest notes-state))
+                     (place-note lane (first note-states) guitar)))]))
