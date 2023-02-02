@@ -72,7 +72,8 @@
     (if (hash-has-key? finger-keys a-key)
         (let ([lane (hash-ref finger-keys a-key)])
           (list (change-fingers (fingers-state state) lane pressing)
-                (change-burn (burn-state state)
+                (change-burn (fingers-state state)
+                             (burn-state state)
                              (notes-state state)
                              lane
                              pressing)

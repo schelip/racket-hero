@@ -243,7 +243,7 @@
   (and (>= note-state burn-range-min) (<= note-state burn-range-max)))
 
 ;; during how many ticks the flame stays in the screen
-(define fire-timeout 14)
+(define fire-timeout 5)
 
 ;; passes time for the rendered flames
 (define (update-burn burn-state)
@@ -254,9 +254,10 @@
 
 ;; checks if there are any notes that will be burned because of a finger press and then
 ;; adds time for the flame that will be rendered
-(define (change-burn burn-state notes-state lane pressing)
+(define (change-burn fingers-state burn-state notes-state lane pressing)
   (cond [(not pressing) burn-state]
-        [(not (for/or ([note-state (list-ref notes-state lane)])
+        [(not (for/or ([note-state (list-ref notes-state lane)]
+                       #:when (not (list-ref fingers-state lane)))
                 (in-burn-range? note-state)))
          burn-state]
         [else (list-set burn-state lane fire-timeout)]))
