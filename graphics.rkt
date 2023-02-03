@@ -113,9 +113,9 @@
    4 (make-note 4)))
 
 ;; places an approaching note
-(define (place-note lane state guitar)
-  (place-image (scale (get-current-scale state) (hash-ref notes lane))
-               (get-current-x lane state) state guitar))
+(define (place-note lane note-state guitar)
+  (place-image (scale (get-current-scale note-state) (hash-ref notes lane))
+               (get-current-x lane note-state) note-state guitar))
 
 ;; guitar constants, also based on figer-size
 (define guitar-separator-width (/ finger-size 10))
@@ -273,24 +273,25 @@
 
 ;; recalculates the approaching notes state on their lanes (because of passing time)
 (define (update-notes notes-state burn-state)
-  (for/list ([lane-state notes-state])
-    (if (empty? (rest lane-state))
+  (for/list ([lane-state notes-state]
+             [lane (in-naturals)])
+    (if (empty? lane-state)
         lane-state
-        (cons (first lane-state)
-              (for/list ([note-state (rest lane-state)]
-                         #:when (and (<= (+ note-state 1) guitar-height)
-                                     (not (and (in-burn-range? note-state)
-                                               (positive? (list-ref burn-state (first lane-state)))))))
-                         (+ note-state (get-adjusted-speed 3 note-state)))))))
+        (for/list ([note-state lane-state]
+                   #:when (and (<= (+ note-state 1) guitar-height)
+                               (not (and (in-burn-range? note-state)
+                                         (positive? (list-ref burn-state lane))))))
+          (+ note-state (get-adjusted-speed 3 note-state))))))
 
 ;; renders the approaching notes on their lanes of the guitar
-(define (render-notes notes-state guitar)
+(define (render-notes notes-state guitar [lane 0])
   (cond
     [(empty? notes-state) guitar]
-    [(empty? (rest (first notes-state))) (render-notes (rest notes-state) guitar)]
-    [else
-     (let ([lane (first (first notes-state))]
-           [note-states (rest (first notes-state))])
-       (render-notes (cons (cons lane (rest note-states))
-                           (rest notes-state))
-                     (place-note lane (first note-states) guitar)))]))
+    [(empty? (first notes-state))
+     (render-notes (rest notes-state)
+                   guitar
+                   (add1 lane))]
+    [else (render-notes
+           (cons (rest (first notes-state)) (rest notes-state))
+           (place-note lane (first (first notes-state)) guitar)
+           lane)]))
