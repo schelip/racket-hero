@@ -6,25 +6,33 @@
 (define offset 0)
 (define resolution 192)
 
+(define (get-clock-offset)
+  ; (/ (- guitar-height fingers-vertical-offset)
+  ;  (clock-tick->game-tick (get-tempo 0))))
+  0)
+
+(define loaded-notes null)
+
 (define (load-notes file-name)
-  (let* ([lines (file->lines file-name)]
-         [tail (drop lines (+ (index-of lines "[ExpertSingle]") 2))]
-         [slice (take tail (sub1 (index-of tail "}")))])
-    (for/list ([line slice]
-               #:do [(define note-info
-                       (let ([rmatch (regexp-match*
-                                      #rx"  (.+) = (.+) (.+) (.+)"
-                                      line
-                                      #:match-select cdr)])
-                         (if (empty? rmatch)
-                             rmatch
-                             (first rmatch))))]
-               #:when (and (not (empty? note-info))
-                           (equal? (second note-info) "N")
-                           (<= (string->number (third note-info)) 4)))
-      (list (string->number (first note-info))
-            (string->number (third note-info))
-            (string->number (fourth note-info))))))
+  (set! loaded-notes
+        (let* ([lines (file->lines file-name)]
+               [tail (drop lines (+ (index-of lines "[ExpertSingle]") 2))]
+               [slice (take tail (sub1 (index-of tail "}")))])
+          (for/list ([line slice]
+                     #:do [(define note-info
+                             (let ([rmatch (regexp-match*
+                                            #rx"  (.+) = (.+) (.+) (.+)"
+                                            line
+                                            #:match-select cdr)])
+                               (if (empty? rmatch)
+                                   rmatch
+                                   (first rmatch))))]
+                     #:when (and (not (empty? note-info))
+                                 (equal? (second note-info) "N")
+                                 (<= (string->number (third note-info)) 4)))
+            (list (string->number (first note-info))
+                  (string->number (third note-info))
+                  (string->number (fourth note-info)))))))
 
 (define sync-track null)
 
@@ -78,21 +86,29 @@
     (/ (/ 1000 28) mspt)))
 
 (define (update-game-tick game-tick)
-  (+ game-tick (clock-tick->game-tick ((compose (lambda (any) (get-tempo game-tick)) pretty-print) (get-tempo game-tick)))))
+  (+ game-tick (clock-tick->game-tick (get-tempo game-tick))))
 
-(define (get-burn-tick-offset game-tick)
-  (* (clock-tick->game-tick (get-tempo game-tick))
-     (/ (- guitar-height fingers-vertical-offset) 3)))
+(define (get-next-loaded-note)
+  (let ([next-note (first loaded-notes)])
+    (set! loaded-notes (rest loaded-notes))
+    next-note))
+
+(define clock-offset (/ (- guitar-height fingers-vertical-offset) note-speed))
+
+(define (should-spawn? game-tick)
+  (>= game-tick
+      (- (first (first loaded-notes))
+         307)))
 
 (define (spawn-note notes-state loaded-note)
   (let ([lane (second loaded-note)])
     (list-set notes-state lane
               (cons 0 (list-ref notes-state lane)))))
 
-(define (spawn-notes game-tick notes-state loaded-notes)
+(define (spawn-notes game-tick notes-state)
   (cond
-    [(empty? loaded-notes) (list notes-state loaded-notes)]
-    [(< ((compose (lambda (any) game-tick) pretty-print) game-tick) (first (first loaded-notes)))  (list notes-state loaded-notes)]
-    [else (spawn-notes game-tick
-                       (spawn-note notes-state (first loaded-notes))
-                       (rest loaded-notes))]))
+    [(empty? loaded-notes) notes-state]
+    [(should-spawn? game-tick)
+     (spawn-notes game-tick
+                  (spawn-note notes-state (get-next-loaded-note)))]
+    [else notes-state]))

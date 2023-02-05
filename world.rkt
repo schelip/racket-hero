@@ -1,7 +1,7 @@
 #lang racket/gui
 (require 2htdp/universe
          "graphics.rkt"
-         "song.rkt")
+         "chart.rkt")
 
 ;; This module controls the state of the world, rendering the appropriate graphics in the
 ;; correct positions based on the passing of time (song playing) and the user events
@@ -13,8 +13,11 @@
 ;; initial state of the world
 (define WORLD0 'resting)
 
-(define file-name "songs/1/notes.chart")
-(load-sync-track file-name)
+(define chart-name "songs/2/notes.chart")
+(define song-name "songs/2/song.mp3")
+(load-sync-track chart-name)
+(load-notes chart-name)
+
 
 (define WORLD_STATE
   (list (list #f #f #f #f #f) ;; pressed fingers
@@ -24,8 +27,7 @@
               empty
               empty
               empty)
-        (load-notes file-name)
-        offset))
+        (get-clock-offset)))
 
 
 ;; getters for each part of the world state
@@ -35,10 +37,8 @@
   (second state))
 (define (notes-state state)
   (third state))
-(define (loaded-notes state)
-  (fourth state))
 (define (game-tick state)
-  (fifth state))
+  (fourth state))
 
 ;; checks if there are any note approaching
 (define (receive state message)
@@ -55,13 +55,11 @@
        [(symbol=? state 'running) (make-package 'running WORLD_STATE)])]
     [(list? state) (let ([spawned-notes (spawn-notes
                                          (game-tick state)
-                                         (notes-state state)
-                                         (loaded-notes state))])
+                                         (notes-state state))])
                      (list (fingers-state state)
                            (update-burn (burn-state state))
-                           (update-notes (first spawned-notes)
+                           (update-notes spawned-notes
                                          (burn-state state))
-                           (second spawned-notes)
                            (update-game-tick (game-tick state))))]))
 
 ;; renders the guitar with its notes
@@ -95,7 +93,6 @@
           (list (change-fingers (fingers-state state) lane pressing)
                 (first after-burn)
                 (second after-burn)
-                (loaded-notes state)
                 (game-tick state)))
         state)))
 
@@ -109,4 +106,5 @@
     (name "guitar")
     (register LOCALHOST)))
 
+(play-sound song-name #t)
 (create-world)
