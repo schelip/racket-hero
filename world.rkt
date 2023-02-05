@@ -1,6 +1,7 @@
 #lang racket/gui
 (require 2htdp/universe
-         "graphics.rkt")
+         "graphics.rkt"
+         "song.rkt")
 
 ;; This module controls the state of the world, rendering the appropriate graphics in the
 ;; correct positions based on the passing of time (song playing) and the user events
@@ -12,14 +13,19 @@
 ;; initial state of the world
 (define WORLD0 'resting)
 
+(define file-name "songs/1/notes.chart")
+(load-sync-track file-name)
+
 (define WORLD_STATE
   (list (list #f #f #f #f #f) ;; pressed fingers
         (list 0 0 0 0 0) ;; burning animations
-        (list (list 10) ;; notes in each lane
-              (list 10 30)
-              (list 60)
-              (list 90)
-              (list 120))))
+        (list empty ;; notes in each lane
+              empty
+              empty
+              empty
+              empty)
+        (load-notes file-name)
+        offset))
 
 
 ;; getters for each part of the world state
@@ -29,13 +35,17 @@
   (second state))
 (define (notes-state state)
   (third state))
+(define (loaded-notes state)
+  (fourth state))
+(define (game-tick state)
+  (fifth state))
 
 ;; checks if there are any note approaching
 (define (receive state message)
-  (cond
-    [(symbol=? state 'resting) 'running]
-    [(symbol=? state 'running) WORLD_STATE]
-    [else state]))
+  (if (symbol? state)
+      (cond [(symbol=? state 'resting) 'running]
+            [(symbol=? state 'running) WORLD_STATE])
+      state))
 
 ;; moves the notes every clock tick
 (define (update state)
@@ -43,18 +53,24 @@
     [(symbol? state)
      (cond
        [(symbol=? state 'running) (make-package 'running WORLD_STATE)])]
-    [(list? state) (list (fingers-state state)
-                         (update-burn (burn-state state))
-                         (update-notes (notes-state state)
-                                       (burn-state state)))]))
+    [(list? state) (let ([spawned-notes (spawn-notes
+                                         (game-tick state)
+                                         (notes-state state)
+                                         (loaded-notes state))])
+                     (list (fingers-state state)
+                           (update-burn (burn-state state))
+                           (update-notes (first spawned-notes)
+                                         (burn-state state))
+                           (second spawned-notes)
+                           (update-game-tick (game-tick state))))]))
 
 ;; renders the guitar with its notes
 (define (render state)
   (cond
     [(symbol? state) guitar]
-    [(list? state) ((compose (lambda (guitar) (render-notes (notes-state state) guitar))
-                             (lambda (guitar) (render-burn (burn-state state) guitar))
-                             (lambda (guitar) (render-fingers (fingers-state state) guitar)))
+    [(list? state) ((compose (λ (guitar) (render-notes (notes-state state) guitar))
+                             (λ (guitar) (render-burn (burn-state state) guitar))
+                             (λ (guitar) (render-fingers (fingers-state state) guitar)))
                     guitar)]))
 
 ;; maps the keyboard keys to the guitar lanes
@@ -70,14 +86,17 @@
 (define (handle-press-release pressing)
   (λ (state a-key)
     (if (hash-has-key? finger-keys a-key)
-        (let ([lane (hash-ref finger-keys a-key)])
+        (let* ([lane (hash-ref finger-keys a-key)]
+               [after-burn (change-burn (fingers-state state)
+                                        (burn-state state)
+                                        (notes-state state)
+                                        lane
+                                        pressing)])
           (list (change-fingers (fingers-state state) lane pressing)
-                (change-burn (fingers-state state)
-                             (burn-state state)
-                             (notes-state state)
-                             lane
-                             pressing)
-                (notes-state state)))
+                (first after-burn)
+                (second after-burn)
+                (loaded-notes state)
+                (game-tick state)))
         state)))
 
 (define (create-world)

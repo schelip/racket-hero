@@ -234,11 +234,11 @@
                           (place-finger (- 5 (length fingers-state)) (first fingers-state) guitar))]))
 
 ;; values for burning the notes
-(define burn-range-extra 15)
+(define burn-range-extra 8)
 (define burn-range-min
   (- (- guitar-height fingers-vertical-offset) (+ finger-height burn-range-extra)))
 (define burn-range-max
-  (+ (- guitar-height fingers-vertical-offset) (+ finger-height burn-range-extra)))
+  (+ (- guitar-height fingers-vertical-offset) (+ finger-height (/ burn-range-extra 2))))
 (define (in-burn-range? note-state)
   (and (>= note-state burn-range-min) (<= note-state burn-range-max)))
 
@@ -255,12 +255,23 @@
 ;; checks if there are any notes that will be burned because of a finger press and then
 ;; adds time for the flame that will be rendered
 (define (change-burn fingers-state burn-state notes-state lane pressing)
-  (cond [(not pressing) burn-state]
-        [(not (for/or ([note-state (list-ref notes-state lane)]
-                       #:when (not (list-ref fingers-state lane)))
-                (in-burn-range? note-state)))
-         burn-state]
-        [else (list-set burn-state lane fire-timeout)]))
+  (let ([new-burn-state (cond [(not pressing) burn-state]
+                              [(not (for/or ([note-state (list-ref notes-state lane)]
+                                             #:when (not (list-ref fingers-state lane)))
+                                      (in-burn-range? note-state)))
+                               burn-state]
+                              [else (list-set burn-state lane fire-timeout)])])
+    (list new-burn-state
+          (burn-notes new-burn-state notes-state))))
+
+(define (burn-notes burn-state notes-state)
+  (for/list ([lane-state notes-state]
+             [lane (in-naturals)])
+    (remove (findf (λ (note-state)
+                     (and (in-burn-range? note-state)
+                          (positive? (list-ref burn-state lane))))
+                   lane-state)
+            lane-state)))
 
 ;; renders the active flames
 (define (render-burn burn-state guitar)
@@ -271,6 +282,8 @@
                            (place-flame (- 5 (length burn-state)) guitar)
                            guitar))]))
 
+(define note-speed 3)
+
 ;; recalculates the approaching notes state on their lanes (because of passing time)
 (define (update-notes notes-state burn-state)
   (for/list ([lane-state notes-state]
@@ -278,9 +291,7 @@
     (if (empty? lane-state)
         lane-state
         (for/list ([note-state lane-state]
-                   #:when (and (<= (+ note-state 1) guitar-height)
-                               (not (and (in-burn-range? note-state)
-                                         (positive? (list-ref burn-state lane))))))
+                   #:when (<= (+ note-state 1) guitar-height))
           (+ note-state (get-adjusted-speed 3 note-state))))))
 
 ;; renders the approaching notes on their lanes of the guitar
