@@ -191,6 +191,32 @@
    (+ fingers-vertical-offset (* 0.22 finger-height))
    guitar))
 
+;; lifebar constants, based on the guitar dimensions
+(define lifebar-width (/ guitar-outer-width 3))
+(define lifebar-height (* 3 lifebar-width))
+(define lifebar-border 3)
+(define max-life 100)
+
+;; life bar sprite, made by underlaying rectangles with different colors for each section
+(define lifebar
+  (overlay (underlay/align 'middle 'top
+                           (rectangle lifebar-width lifebar-height 'solid 'red)
+                           (rectangle lifebar-width (*(/ lifebar-height 3) 2) 'solid 'yellow)
+                           (rectangle lifebar-width (/ lifebar-height 3) 'solid 'green))
+           (rectangle (+ lifebar-width (* lifebar-border 2)) (+ lifebar-height (* 2 lifebar-border)) 'solid 'gray)))
+
+;; life bar indicator sprite, a simple rectangle
+(define lifebar-indicator
+  (rectangle ( + lifebar-width (* 2 lifebar-border)) lifebar-border 'solid 'orange))
+
+;; places the indicator in the lifebar
+(define (place-lifebar life-state guitar)
+  (place-image/align (place-image/align lifebar-indicator 0
+                                        (+ (* (/ life-state max-life) lifebar-height) lifebar-border)
+                                        'left 'center lifebar)
+                     guitar-larger-width 0 'right 'top
+                     guitar))
+
 ;; ---------------------------------------------------------------------------------------------------
 ;; RENDERING AND ANIMATIONS
 ;; ---------------------------------------------------------------------------------------------------
@@ -254,15 +280,21 @@
 
 ;; checks if there are any notes that will be burned because of a finger press and then
 ;; adds time for the flame that will be rendered
-(define (change-burn fingers-state burn-state notes-state lane pressing)
-  (let ([new-burn-state (cond [(not pressing) burn-state]
-                              [(not (for/or ([note-state (list-ref notes-state lane)]
-                                             #:when (not (list-ref fingers-state lane)))
-                                      (in-burn-range? note-state)))
-                               burn-state]
-                              [else (list-set burn-state lane fire-timeout)])])
+(define (change-burn fingers-state burn-state notes-state life-state lane pressing)
+  (let* ([new-burn-state (cond [(not pressing) burn-state]
+                               [(not (for/or ([note-state (list-ref notes-state lane)]
+                                              #:when (not (list-ref fingers-state lane)))
+                                       (in-burn-range? note-state)))
+                                burn-state]
+                               [else (list-set burn-state lane fire-timeout)])]
+         [new-notes-state (burn-notes new-burn-state notes-state)]
+         [new-life-state (if pressing
+                             (update-life notes-state new-notes-state life-state
+                                          (λ (life diff) (if (zero? diff) (add1 life) (+ life diff))))
+                             life-state)]);;(λ (life diff) (+ life (* 2 diff))))])
     (list new-burn-state
-          (burn-notes new-burn-state notes-state))))
+          new-notes-state
+          new-life-state)))
 
 (define (burn-notes burn-state notes-state)
   (for/list ([lane-state notes-state]
@@ -285,14 +317,17 @@
 (define note-speed 3)
 
 ;; recalculates the approaching notes state on their lanes (because of passing time)
-(define (update-notes notes-state burn-state)
-  (for/list ([lane-state notes-state]
-             [lane (in-naturals)])
-    (if (empty? lane-state)
-        lane-state
-        (for/list ([note-state lane-state]
-                   #:when (<= (+ note-state 1) guitar-height))
-          (+ note-state (get-adjusted-speed 3 note-state))))))
+(define (update-notes notes-state life-state)
+  (let* ([new-notes-state
+          (for/list ([lane-state notes-state])
+            (if (empty? lane-state)
+                lane-state
+                (for/list ([note-state lane-state]
+                           #:when (<= (+ note-state 1) guitar-height))
+                  (+ note-state (get-adjusted-speed note-speed note-state)))))]
+         [new-life-state (update-life notes-state new-notes-state life-state -)])
+    (list new-notes-state
+          new-life-state)))
 
 ;; renders the approaching notes on their lanes of the guitar
 (define (render-notes notes-state guitar [lane 0])
@@ -306,3 +341,14 @@
            (cons (rest (first notes-state)) (rest notes-state))
            (place-note lane (first (first notes-state)) guitar)
            lane)]))
+
+;; updates the life state base on how many notes were burned or missed
+(define (update-life old-notes-state new-notes-state life-state proc)
+  (define (notes-foldr notes-state)
+    (foldr + 0 (for/list ([lane-state notes-state])
+                 (length lane-state))))
+  (max 0 (min max-life (proc life-state (- (notes-foldr new-notes-state) (notes-foldr old-notes-state))))))
+
+;; renders the lifebar next to the guitar
+(define (render-lifebar life-state guitar)
+    (place-lifebar life-state guitar))

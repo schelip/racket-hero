@@ -93,12 +93,11 @@
     (set! loaded-notes (rest loaded-notes))
     next-note))
 
-(define clock-offset (/ (- guitar-height fingers-vertical-offset) note-speed))
+(define clock-offset 78)
 
 (define (should-spawn? game-tick)
   (>= game-tick
-      (- (first (first loaded-notes))
-         307)))
+      (- (first (first loaded-notes)) 270)))
 
 (define (spawn-note notes-state loaded-note)
   (let ([lane (second loaded-note)])

@@ -13,8 +13,8 @@
 ;; initial state of the world
 (define WORLD0 'resting)
 
-(define chart-name "songs/2/notes.chart")
-(define song-name "songs/2/song.mp3")
+(define chart-name "songs/1/notes.chart")
+(define song-name "songs/1/song.mp3")
 (load-sync-track chart-name)
 (load-notes chart-name)
 
@@ -27,7 +27,8 @@
               empty
               empty
               empty)
-        (get-clock-offset)))
+        (get-clock-offset)
+        (/ max-life 2)))
 
 
 ;; getters for each part of the world state
@@ -39,6 +40,8 @@
   (third state))
 (define (game-tick state)
   (fourth state))
+(define (life-state state)
+  (fifth state))
 
 ;; checks if there are any note approaching
 (define (receive state message)
@@ -53,20 +56,23 @@
     [(symbol? state)
      (cond
        [(symbol=? state 'running) (make-package 'running WORLD_STATE)])]
-    [(list? state) (let ([spawned-notes (spawn-notes
+    [(list? state) (let* ([spawned-notes (spawn-notes
                                          (game-tick state)
-                                         (notes-state state))])
+                                         (notes-state state))]
+                         [after-note-update (update-notes spawned-notes
+                                                          (life-state state))])
                      (list (fingers-state state)
                            (update-burn (burn-state state))
-                           (update-notes spawned-notes
-                                         (burn-state state))
-                           (update-game-tick (game-tick state))))]))
+                           (first after-note-update)
+                           (update-game-tick (game-tick state))
+                           (second after-note-update)))]))
 
 ;; renders the guitar with its notes
 (define (render state)
   (cond
     [(symbol? state) guitar]
-    [(list? state) ((compose (λ (guitar) (render-notes (notes-state state) guitar))
+    [(list? state) ((compose (λ (guitar) (render-lifebar (life-state state) guitar))
+                             (λ (guitar) (render-notes (notes-state state) guitar))
                              (λ (guitar) (render-burn (burn-state state) guitar))
                              (λ (guitar) (render-fingers (fingers-state state) guitar)))
                     guitar)]))
@@ -88,12 +94,14 @@
                [after-burn (change-burn (fingers-state state)
                                         (burn-state state)
                                         (notes-state state)
+                                        (life-state state)
                                         lane
                                         pressing)])
           (list (change-fingers (fingers-state state) lane pressing)
                 (first after-burn)
                 (second after-burn)
-                (game-tick state)))
+                (game-tick state)
+                (third after-burn)))
         state)))
 
 (define (create-world)
@@ -106,5 +114,5 @@
     (name "guitar")
     (register LOCALHOST)))
 
-(play-sound song-name #t)
+; (play-sound song-name #t)
 (create-world)
