@@ -11,9 +11,9 @@
 ;; ---------------------------------------------------------------------------------------------------
 
 ;; initial state of the world
-(define WORLD0 'resting)
+(define WORLD0 'run)
 
-(define chart-name "songs/1/notes.chart")
+(define chart-name "songs/1/notes.chart.full")
 (define song-name "songs/1/song.mp3")
 (load-sync-track chart-name)
 (load-notes chart-name)
@@ -30,6 +30,7 @@
         (get-clock-offset)
         (/ max-life 2)))
 
+(define game-over-timeout (* 28 3))
 
 ;; getters for each part of the world state
 (define (fingers-state state)
@@ -46,8 +47,9 @@
 ;; checks if there are any note approaching
 (define (receive state message)
   (if (symbol? state)
-      (cond [(symbol=? state 'resting) 'running]
-            [(symbol=? state 'running) WORLD_STATE])
+      (cond [(symbol=? state 'run) WORLD_STATE]
+            [(symbol=? state 'game-over-fail) #f]
+            [(symbol=? state 'game-over-success) #t])
       state))
 
 ;; moves the notes every clock tick
@@ -55,22 +57,28 @@
   (cond
     [(symbol? state)
      (cond
-       [(symbol=? state 'running) (make-package 'running WORLD_STATE)])]
+       [(symbol=? state 'run) (make-package 'run WORLD_STATE)])]
     [(list? state) (let* ([spawned-notes (spawn-notes
-                                         (game-tick state)
-                                         (notes-state state))]
-                         [after-note-update (update-notes spawned-notes
-                                                          (life-state state))])
-                     (list (fingers-state state)
-                           (update-burn (burn-state state))
-                           (first after-note-update)
-                           (update-game-tick (game-tick state))
-                           (second after-note-update)))]))
+                                          (game-tick state)
+                                          (notes-state state))]
+                          [after-note-update (update-notes spawned-notes
+                                                           (life-state state))])
+                     (cond
+                       [(package? after-note-update) after-note-update]
+                       [(and (empty? loaded-notes) (for/and ([lane-state spawned-notes])
+                                                     (empty? lane-state)))
+                        (make-package 'game-over-success #t)]
+                       [else (list (fingers-state state)
+                                   (update-burn (burn-state state))
+                                   (first after-note-update)
+                                   (update-game-tick (game-tick state))
+                                   (second after-note-update))]))]))
 
 ;; renders the guitar with its notes
 (define (render state)
   (cond
     [(symbol? state) guitar]
+    [(boolean? state) (render-game-over-screen state)]
     [(list? state) ((compose (λ (guitar) (render-lifebar (life-state state) guitar))
                              (λ (guitar) (render-notes (notes-state state) guitar))
                              (λ (guitar) (render-burn (burn-state state) guitar))
@@ -97,12 +105,14 @@
                                         (life-state state)
                                         lane
                                         pressing)])
-          (list (change-fingers (fingers-state state) lane pressing)
-                (first after-burn)
-                (second after-burn)
-                (game-tick state)
-                (third after-burn)))
-        state)))
+          (if (package? after-burn)
+              after-burn
+              (list (change-fingers (fingers-state state) lane pressing)
+                    (first after-burn)
+                    (second after-burn)
+                    (game-tick state)
+                    (third after-burn))))
+          state)))
 
 (define (create-world)
   (big-bang WORLD0
@@ -111,8 +121,9 @@
     (to-draw render)
     (on-key (handle-press-release #t))
     (on-release (handle-press-release #f))
-    (name "guitar")
+    (stop-when boolean? render)
+    (name "Racket Hero")
     (register LOCALHOST)))
 
-; (play-sound song-name #t)
+(play-sound song-name #t)
 (create-world)

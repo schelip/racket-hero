@@ -201,7 +201,7 @@
 (define lifebar
   (overlay (underlay/align 'middle 'top
                            (rectangle lifebar-width lifebar-height 'solid 'red)
-                           (rectangle lifebar-width (*(/ lifebar-height 3) 2) 'solid 'yellow)
+                           (rectangle lifebar-width (* (/ lifebar-height 3) 2) 'solid 'yellow)
                            (rectangle lifebar-width (/ lifebar-height 3) 'solid 'green))
            (rectangle (+ lifebar-width (* lifebar-border 2)) (+ lifebar-height (* 2 lifebar-border)) 'solid 'gray)))
 
@@ -212,10 +212,17 @@
 ;; places the indicator in the lifebar
 (define (place-lifebar life-state guitar)
   (place-image/align (place-image/align lifebar-indicator 0
-                                        (+ (* (/ life-state max-life) lifebar-height) lifebar-border)
+                                        (+ (* (/ (- max-life life-state) max-life) lifebar-height) lifebar-border)
                                         'left 'center lifebar)
                      guitar-larger-width 0 'right 'top
                      guitar))
+
+;; game over screen, made by overlaying a panel with text on the base guitar
+(define (game-over-screen text)
+  (overlay/align 'center 'center
+                 (text/font text 18 'white #f 'system 'normal 'bold #f)
+                 (rectangle 200 100 'solid 'black)
+                 guitar))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; RENDERING AND ANIMATIONS
@@ -290,11 +297,13 @@
          [new-notes-state (burn-notes new-burn-state notes-state)]
          [new-life-state (if pressing
                              (update-life notes-state new-notes-state life-state
-                                          (λ (life diff) (if (zero? diff) (add1 life) (+ life diff))))
-                             life-state)]);;(λ (life diff) (+ life (* 2 diff))))])
-    (list new-burn-state
-          new-notes-state
-          new-life-state)))
+                                          (λ (life diff) (if (zero? diff) (sub1 life) (- life diff))))
+                             life-state)])
+    (if (package? new-life-state)
+        new-life-state
+        (list new-burn-state
+              new-notes-state
+              new-life-state))))
 
 (define (burn-notes burn-state notes-state)
   (for/list ([lane-state notes-state]
@@ -325,9 +334,11 @@
                 (for/list ([note-state lane-state]
                            #:when (<= (+ note-state 1) guitar-height))
                   (+ note-state (get-adjusted-speed note-speed note-state)))))]
-         [new-life-state (update-life notes-state new-notes-state life-state -)])
-    (list new-notes-state
-          new-life-state)))
+         [new-life-state (update-life notes-state new-notes-state life-state +)])
+    (if (package? new-life-state)
+        new-life-state
+        (list new-notes-state
+              new-life-state))))
 
 ;; renders the approaching notes on their lanes of the guitar
 (define (render-notes notes-state guitar [lane 0])
@@ -347,8 +358,14 @@
   (define (notes-foldr notes-state)
     (foldr + 0 (for/list ([lane-state notes-state])
                  (length lane-state))))
-  (max 0 (min max-life (proc life-state (- (notes-foldr new-notes-state) (notes-foldr old-notes-state))))))
+  (let ([new-life (proc life-state (- (notes-foldr new-notes-state) (notes-foldr old-notes-state)))])
+    (if (<= new-life 0)
+        (make-package 'game-over-fail #f)
+        (min max-life new-life))))
 
 ;; renders the lifebar next to the guitar
 (define (render-lifebar life-state guitar)
     (place-lifebar life-state guitar))
+
+(define (render-game-over-screen success)
+  (game-over-screen (if success "You Rock!" "Game Over")))
