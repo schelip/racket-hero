@@ -118,7 +118,6 @@
                (get-current-x lane note-state) note-state guitar))
 
 ;; guitar constants, also based on figer-size
-(define guitar-separator-width (/ finger-size 10))
 (define guitar-larger-width-factor 5.5)
 (define guitar-smaller-width-factor 3.5)
 (define guitar-larger-width (* guitar-larger-width-factor finger-size))
@@ -153,8 +152,10 @@
       (add1 it)
       (place-finger (sub1 it) #f
                     (if (= it 5) image
-                        (add-line image (+ guitar-outer-width (* it (/ guitar-smaller-width 5)))
-                                  0 (* it (/ guitar-larger-width 5)) guitar-height 'black))))]))
+                        (add-line image
+                                  (+ guitar-outer-width (* it (/ guitar-smaller-width 5))) 0
+                                  (* it (/ guitar-larger-width 5)) guitar-height
+                                  'black))))]))
 
 ;; the base guitar with no notes and no fingers - in other words, the background
 (define guitar (make-guitar))

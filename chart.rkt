@@ -1,15 +1,30 @@
 #lang racket/gui
-(require "graphics.rkt")
 
 (provide (all-defined-out))
 
 (define offset 0)
 (define resolution 192)
 
-(define (get-clock-offset)
-  ; (/ (- guitar-height fingers-vertical-offset)
-  ;  (clock-tick->game-tick (get-tempo 0))))
-  0)
+(define (load-chart file-name)
+  (begin
+    (load-song-info file-name)
+    (load-notes file-name)
+    (load-sync-track file-name)))
+
+(define (load-song-info file-name)
+  (define (parse-info info lines)
+    (for/or ([line lines])
+      (let ([rmatch (regexp-match*
+                     (regexp (string-append "  " info " = (.+)"))
+                     line
+                     #:match-select cadr)])
+        (and (not (empty? rmatch)) (string->number (first rmatch))))))
+  (let* ([lines (file->lines file-name)]
+         [offset-info (parse-info "Offset" lines)]
+         [resolution-info (parse-info "Resolution" lines)])
+    (and offset-info (set! offset offset-info))
+    (and resolution-info (set! resolution resolution-info))))
+
 
 (define loaded-notes null)
 
@@ -93,11 +108,8 @@
     (set! loaded-notes (rest loaded-notes))
     next-note))
 
-(define clock-offset 78)
-
 (define (should-spawn? game-tick)
-  (>= game-tick
-      (- (first (first loaded-notes)) 270)))
+  (>= game-tick (first (first loaded-notes))))
 
 (define (spawn-note notes-state loaded-note)
   (let ([lane (second loaded-note)])

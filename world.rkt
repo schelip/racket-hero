@@ -13,10 +13,9 @@
 ;; initial state of the world
 (define WORLD0 'run)
 
-(define chart-name "songs/1/notes.chart.full")
+(define chart-file "songs/1/notes.chart.full")
 (define song-name "songs/1/song.mp3")
-(load-sync-track chart-name)
-(load-notes chart-name)
+(load-chart chart-file)
 
 
 (define WORLD_STATE
@@ -27,10 +26,8 @@
               empty
               empty
               empty)
-        (get-clock-offset)
+        offset
         (/ max-life 2)))
-
-(define game-over-timeout (* 28 3))
 
 ;; getters for each part of the world state
 (define (fingers-state state)
