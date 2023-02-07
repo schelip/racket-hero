@@ -1,6 +1,8 @@
 #lang racket/gui
 (require 2htdp/universe)
 
+(provide create-universe)
+
 (define (add-world univ wrld)
   (local ((define univ* (append univ (list wrld))))
     (make-bundle univ*
@@ -13,4 +15,5 @@
                  (list (make-mail (first univ*) 'run))
                  '())))
 
-(universe '() (on-new add-world) (on-msg switch))
+(define (create-universe)
+  (universe '() (on-new add-world) (on-msg switch)))

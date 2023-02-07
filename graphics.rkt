@@ -300,7 +300,7 @@
                              (update-life notes-state new-notes-state life-state
                                           (λ (life diff) (if (zero? diff) (sub1 life) (- life diff))))
                              life-state)])
-    (if (package? new-life-state)
+    (if (symbol? new-life-state)
         new-life-state
         (list new-burn-state
               new-notes-state
@@ -336,7 +336,7 @@
                            #:when (<= (+ note-state 1) guitar-height))
                   (+ note-state (get-adjusted-speed note-speed note-state)))))]
          [new-life-state (update-life notes-state new-notes-state life-state +)])
-    (if (package? new-life-state)
+    (if (symbol? new-life-state)
         new-life-state
         (list new-notes-state
               new-life-state))))
@@ -361,7 +361,7 @@
                  (length lane-state))))
   (let ([new-life (proc life-state (- (notes-foldr new-notes-state) (notes-foldr old-notes-state)))])
     (if (<= new-life 0)
-        (make-package 'game-over-fail #f)
+        'game-over-fail
         (min max-life new-life))))
 
 ;; renders the lifebar next to the guitar

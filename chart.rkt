@@ -4,6 +4,8 @@
 
 (define offset 0)
 (define resolution 192)
+(define loaded-notes null)
+(define sync-track null)
 
 (define (load-chart file-name)
   (begin
@@ -25,9 +27,6 @@
     (and offset-info (set! offset offset-info))
     (and resolution-info (set! resolution resolution-info))))
 
-
-(define loaded-notes null)
-
 (define (load-notes file-name)
   (set! loaded-notes
         (let* ([lines (file->lines file-name)]
@@ -48,8 +47,6 @@
             (list (string->number (first note-info))
                   (string->number (third note-info))
                   (string->number (fourth note-info)))))))
-
-(define sync-track null)
 
 (define (load-sync-track file-name)
   (define (make-sync-track sync-lines current-ts current-bpm)

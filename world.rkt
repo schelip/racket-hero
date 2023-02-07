@@ -6,19 +6,14 @@
 ;; This module controls the state of the world, rendering the appropriate graphics in the
 ;; correct positions based on the passing of time (song playing) and the user events
 
+(provide create-world)
+
 ;; ---------------------------------------------------------------------------------------------------
 ;; WORLD
 ;; ---------------------------------------------------------------------------------------------------
 
 ;; initial state of the world
-(define WORLD0 'run)
-
-(define chart-file "songs/1/notes.chart.full")
-(define song-name "songs/1/song.mp3")
-(load-chart chart-file)
-
-
-(define WORLD_STATE
+(define (make-world-0 offset)
   (list (list #f #f #f #f #f) ;; pressed fingers
         (list 0 0 0 0 0) ;; burning animations
         (list empty ;; notes in each lane
@@ -41,41 +36,28 @@
 (define (life-state state)
   (fifth state))
 
-;; checks if there are any note approaching
-(define (receive state message)
-  (if (symbol? state)
-      (cond [(symbol=? state 'run) WORLD_STATE]
-            [(symbol=? state 'game-over-fail) #f]
-            [(symbol=? state 'game-over-success) #t])
-      state))
-
 ;; moves the notes every clock tick
 (define (update state)
-  (cond
-    [(symbol? state)
-     (cond
-       [(symbol=? state 'run) (make-package 'run WORLD_STATE)])]
-    [(list? state) (let* ([spawned-notes (spawn-notes
-                                          (game-tick state)
-                                          (notes-state state))]
-                          [after-note-update (update-notes spawned-notes
-                                                           (life-state state))])
-                     (cond
-                       [(package? after-note-update) after-note-update]
-                       [(and (empty? loaded-notes) (for/and ([lane-state spawned-notes])
-                                                     (empty? lane-state)))
-                        (make-package 'game-over-success #t)]
-                       [else (list (fingers-state state)
-                                   (update-burn (burn-state state))
-                                   (first after-note-update)
-                                   (update-game-tick (game-tick state))
-                                   (second after-note-update))]))]))
+  (let* ([spawned-notes (spawn-notes
+                         (game-tick state)
+                         (notes-state state))]
+         [after-note-update (update-notes spawned-notes
+                                          (life-state state))])
+    (cond
+      [(symbol? after-note-update) after-note-update]
+      [(and (empty? loaded-notes) (for/and ([lane-state spawned-notes])
+                                    (empty? lane-state)))
+       'game-over-success]
+      [else (list (fingers-state state)
+                  (update-burn (burn-state state))
+                  (first after-note-update)
+                  (update-game-tick (game-tick state))
+                  (second after-note-update))])))
 
 ;; renders the guitar with its notes
 (define (render state)
   (cond
-    [(symbol? state) guitar]
-    [(boolean? state) (render-game-over-screen state)]
+    [(symbol? state) (render-game-over-screen (equal? state 'game-over-success))]
     [(list? state) ((compose (λ (guitar) (render-lifebar (life-state state) guitar))
                              (λ (guitar) (render-notes (notes-state state) guitar))
                              (λ (guitar) (render-burn (burn-state state) guitar))
@@ -102,7 +84,7 @@
                                         (life-state state)
                                         lane
                                         pressing)])
-          (if (package? after-burn)
+          (if (symbol? after-burn)
               after-burn
               (list (change-fingers (fingers-state state) lane pressing)
                     (first after-burn)
@@ -111,16 +93,11 @@
                     (third after-burn))))
           state)))
 
-(define (create-world)
-  (big-bang WORLD0
-    (on-receive receive)
+(define (create-world offset)
+  (big-bang (make-world-0 offset)
     (on-tick update)
     (to-draw render)
     (on-key (handle-press-release #t))
     (on-release (handle-press-release #f))
-    (stop-when boolean? render)
-    (name "Racket Hero")
-    (register LOCALHOST)))
-
-(play-sound song-name #t)
-(create-world)
+    (stop-when symbol? render)
+    (name "Racket Hero")))

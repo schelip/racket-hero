@@ -1,42 +1,52 @@
 #lang racket/gui
-(require pict racket/draw racket/include)
+(require "chart.rkt" "world.rkt")
 
-(define (on-game-event event)
- (void))
+(define play #f)
 
-;; A frame which intercepts keyboard input using the `on-subwindow-char`
-;; method and passes it to `on-game-event` -- this is used to read keyboard
-;; input from the user and press the right note.
-(define game-frame%
-  (class frame%
-    (init) (super-new)
-    (define/override (on-subwindow-char receiver event)
-      (on-game-event event)
-      (super on-subwindow-char receiver event))))
+(define (list-options) (void))
 
-;; The dimensions of the playing field
-(define-values (window-width window-height)
-  (values 180 360))
+(define song-option (make-parameter null))
+(define chart-file (make-parameter "notes.chart"))
+(define audio-file (make-parameter null))
 
-;; The toplevel window for the game
+(define (set-song-option SONG-OPTION)
+  (begin (set! song-option SONG-OPTION)
+         (set! play #t)))
 
-(define toplevel
-  (new game-frame% [label "Racket Hero"] [width window-width] [height window-height]))
+(define (start-game song-option)
+  (begin
+    (load-chart
+     (string-append "songs/" song-option "/" (chart-file)))
+    (and (not (null? (audio-file)))
+         (play-sound (string-append "songs/" song-option "/" (audio-file)) #t))
+    (create-world offset)))
 
-;; Panel which holds all the controls and sub-panels in the game
-(define game-panel (new horizontal-panel% [parent toplevel] [spacing 20] [border 20]))
+(define (show-list)
+  (for-each (lambda (path) (pretty-print (path->string path)))
+            (directory-list "songs")))
 
-;; A canvas which holds the drawing area for the game -- the on-tetris-paint
-;; defined above is used to fill the canvas, and will be invoked when the
-;; canvas is refreshed.
-(define play-field (new canvas% [parent game-panel]
-                        [min-width window-width]
-                        [min-height window-height]
-                        [stretchable-width #f]
-                        [stretchable-height #f]))
+(command-line
+ #:program "racket-hero"
 
-(define (start-game)
-  (send play-field focus)
-  (send toplevel show #t))
+ #:help-labels "Operations to perform:"
 
-(start-game)
+ #:once-any
+ [("-p" "--play") SONG-OPTION
+                  "Starts the game with the provided './songs' subdirectory"
+                  (set-song-option SONG-OPTION)]
+ [("-l" "--list") "Lists the available songs to be played"
+                  (set! play #f)]
+
+ #:once-each
+ [("-c" "--chart") CHART-FILE
+                   "The chart file at the './songs' subdir (default: notes.chart"
+                   (chart-file CHART-FILE)]
+
+ [("-a" "--audio") SONG-FILE
+                   "(EXPERIMENTAL) The audio file at the './songs' subdir to be played along with the chart"
+                   (audio-file SONG-FILE)]
+
+ #:args ()
+ (if play
+     (start-game song-option)
+     (show-list)))
