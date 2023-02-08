@@ -1,25 +1,23 @@
 #lang racket/gui
 (require "chart.rkt" "world.rkt")
 
-(define play #f)
+(provide is-playing?)
 
-(define (list-options) (void))
+(define play-mode (make-parameter 'play))
+(define (is-playing?) (equal? (play-mode) 'play))
 
+(define mode (make-parameter 'play))
 (define song-option (make-parameter null))
 (define chart-file (make-parameter "notes.chart"))
 (define audio-file (make-parameter null))
 
-(define (set-song-option SONG-OPTION)
-  (begin (set! song-option SONG-OPTION)
-         (set! play #t)))
-
-(define (start-game song-option)
+(define (start-game)
   (begin
     (load-chart
-     (string-append "songs/" song-option "/" (chart-file)))
+     (string-append "songs/" (song-option) "/" (chart-file)))
     (and (not (null? (audio-file)))
-         (play-sound (string-append "songs/" song-option "/" (audio-file)) #t))
-    (create-world offset)))
+         (play-sound (string-append "songs/" (song-option) "/" (audio-file)) #t))
+    (create-world offset (mode))))
 
 (define (show-list)
   (for-each (lambda (path) (pretty-print (path->string path)))
@@ -33,9 +31,10 @@
  #:once-any
  [("-p" "--play") SONG-OPTION
                   "Starts the game with the provided './songs' subdirectory"
-                  (set-song-option SONG-OPTION)]
+                  (song-option SONG-OPTION)]
+
  [("-l" "--list") "Lists the available songs to be played"
-                  (set! play #f)]
+                  (mode 'list)]
 
  #:once-each
  [("-c" "--chart") CHART-FILE
@@ -46,7 +45,10 @@
                    "(EXPERIMENTAL) The audio file at the './songs' subdir to be played along with the chart"
                    (audio-file SONG-FILE)]
 
+ [("-w" "--watch-only") "The computer itself plays the game, without player interaction"
+                        (mode 'watch)]
+
  #:args ()
- (if play
-     (start-game song-option)
-     (show-list)))
+ (if (equal? (mode) 'list)
+     (show-list)
+     (start-game)))

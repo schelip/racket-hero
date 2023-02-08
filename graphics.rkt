@@ -1,5 +1,5 @@
 #lang racket/gui
-(require 2htdp/image 2htdp/universe lang/posn)
+(require 2htdp/image lang/posn)
 
 ;; The objective of this module is to provide the graphics for the game. In order to do that, it must
 ;; be able to render the guitar, the fingers, simple and long notes, and play the animations for the
@@ -305,6 +305,16 @@
         (list new-burn-state
               new-notes-state
               new-life-state))))
+
+(define (burn-all-notes burn-state notes-state)
+  (let ([new-burn-state (for/list ([lane-burn-state burn-state]
+                                   [lane (in-naturals)])
+                          (if (for/or ([note-state (list-ref notes-state lane)])
+                                (in-burn-range? note-state))
+                              fire-timeout
+                              lane-burn-state))])
+    (list (burn-notes new-burn-state notes-state)
+          new-burn-state)))
 
 (define (burn-notes burn-state notes-state)
   (for/list ([lane-state notes-state]
