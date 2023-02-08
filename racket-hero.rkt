@@ -20,7 +20,7 @@
     (create-world offset (mode))))
 
 (define (show-list)
-  (for-each (lambda (path) (pretty-print (path->string path)))
+  (for-each (λ (path) (pretty-print (path->string path)))
             (directory-list "songs")))
 
 (command-line
