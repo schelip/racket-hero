@@ -5,12 +5,12 @@ Jogo de ritmo no estilo Guitar Hero escrito em racket usando a biblioteca 2htdp.
 Desenvolvido durante a disciplina de PPLF (6902/02)
 no terceiro ano de Ciência da Computação na UEM
 para realização do Trbalho Prático 1
- 
-Alunos:
-  Felipe Gabriel Comin Scheffel - RA117306
-  Douglas Kenji Sakakibara - RA117741
 
-Professor: Wagner Igarashi
+**Alunos:**
+ - Felipe Gabriel Comin Scheffel - RA117306
+ - Douglas Kenji Sakakibara - RA117741
+
+**Professor:** Wagner Igarashi
 
 ## Para rodar
 
